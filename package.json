@@ -1,0 +1,70 @@
+{
+  "name": "claude-cowork-switch",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A local Claude Desktop Gateway switcher that reads cc-switch provider configs.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node test/smoke-test.mjs",
+    "app:dev": "electron .",
+    "package:mac-native": "scripts/package-macos.sh",
+    "package:electron": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:linux": "electron-builder --linux AppImage deb tar.gz"
+  },
+  "bin": {
+    "claude-cowork-switch": "src/server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "sql.js": "^1.10.3"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.local.claudecoworkswitch",
+    "productName": "Claude 中转切换器",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "public/**/*",
+      "package.json",
+      "README.md"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

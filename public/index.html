@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Claude 中转切换器</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Claude 中转切换器</h1>
+        <p>读取现有 cc-switch 配置，切换 Claude Desktop Gateway 上游。</p>
+      </div>
+      <div class="actions">
+        <button id="configureClaudeButton" type="button">一键配置 Claude Desktop</button>
+        <button id="restartClaudeButton" type="button">重启 Claude</button>
+        <button id="refreshButton" type="button">刷新</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="status-band" aria-label="Gateway status">
+        <div class="metric">
+          <span class="label">Gateway 地址</span>
+          <code id="gatewayUrl">http://127.0.0.1:8787</code>
+        </div>
+        <div class="metric">
+          <span class="label">Gateway 密钥</span>
+          <code id="bridgeKey">加载中</code>
+        </div>
+        <div class="metric">
+          <span class="label">当前渠道</span>
+          <strong id="activeProvider">加载中</strong>
+        </div>
+      </section>
+
+      <section class="claude-band" aria-label="Claude Desktop 配置">
+        <div>
+          <span class="label">Claude Desktop</span>
+          <strong id="claudeConfigStatus">正在检查配置...</strong>
+        </div>
+        <code id="claudeConfigPath">加载中</code>
+      </section>
+
+      <section class="content-grid">
+        <aside class="side-panel" aria-label="检测到的配置位置">
+          <h2>配置来源</h2>
+          <dl id="locations"></dl>
+        </aside>
+
+        <section class="main-panel" aria-label="渠道列表">
+          <div class="panel-heading">
+            <div>
+              <h2>渠道</h2>
+              <p id="providerSummary">正在扫描 cc-switch 配置...</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>应用</th>
+                  <th>协议</th>
+                  <th>模型</th>
+                  <th>地址</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="providerRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <tr>
+        <td colspan="7" class="empty">没有检测到 cc-switch 渠道。</td>
+      </tr>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
