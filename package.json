@@ -55,6 +55,7 @@
         "releaseType": "release"
       }
     ],
+    "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",

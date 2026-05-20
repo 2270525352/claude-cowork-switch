@@ -4,7 +4,10 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const execFileAsync = promisify(execFile);
 const PORT = 8791;
@@ -178,7 +181,7 @@ function startMockOpenAi(expectedModel) {
 
 function startApp(env) {
   const child = spawn(process.execPath, ["src/server.mjs"], {
-    cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), ".."),
+    cwd: path.resolve(__dirname, ".."),
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"]
   });
