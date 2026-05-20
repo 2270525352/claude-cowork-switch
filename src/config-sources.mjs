@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getCachedState } from "./state.mjs";
+import { listCustomProviders, toProviderShape } from "./custom-providers.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -133,10 +135,17 @@ function officialClaudeModels() {
   return uniqueModels(process.env.CLAUDE_GATEWAY_OFFICIAL_MODELS || DEFAULT_OFFICIAL_CLAUDE_MODELS);
 }
 
+function activeModelSource() {
+  const cached = getCachedState();
+  const value = (cached?.modelSource || process.env.CLAUDE_GATEWAY_MODEL_SOURCE || "auto").toLowerCase();
+  return value;
+}
+
 function shouldUseOfficialClaudeModels(configured) {
-  const source = (process.env.CLAUDE_GATEWAY_MODEL_SOURCE || "auto").toLowerCase();
+  const source = activeModelSource();
   if (source === "provider" || source === "cc-switch") return false;
   if (source === "official") return true;
+  if (configured.length === 0) return true;
   return configured.some(isClaudeLikeModel);
 }
 
@@ -221,24 +230,54 @@ function maskUrl(url) {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+function loopbackSafe(url) {
+  if (!url) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:") return true;
+    if (parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname)) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+const APP_TYPE_LABELS = {
+  claude: "CLAUDE",
+  codex: "CODEX",
+  hermes: "HERMES",
+  gemini: "GEMINI"
+};
+
+function appTypeLabel(appType) {
+  return APP_TYPE_LABELS[appType] || (appType ? appType.toUpperCase() : "UNKNOWN");
+}
+
 function normalizeDbProvider(row, config, settings, endpointMap) {
   const env = config.env || {};
   const auth = config.auth || {};
   const endpoint = endpointMap.get(row.id);
   const ccSwitchCurrentId = row.app_type === "claude"
     ? settings?.currentProviderClaude
-    : settings?.currentProviderCodex;
-  const isCcSwitchCurrent = Boolean(row.is_current) || ccSwitchCurrentId === row.id;
+    : row.app_type === "codex"
+      ? settings?.currentProviderCodex
+      : null;
+  const isCcSwitchCurrent = Boolean(ccSwitchCurrentId) && ccSwitchCurrentId === row.id;
+
+  const hermesAnthropicMode = row.app_type === "hermes" && /anthropic/i.test(config.api_mode || "");
+  const isAnthropicAppType = row.app_type === "claude" || hermesAnthropicMode;
 
   const anthropicBaseUrl = normalizeBaseUrl(firstString(
     env.ANTHROPIC_BASE_URL,
     config.anthropicBaseUrl,
     config.anthropic_base_url,
-    row.app_type === "claude" ? endpoint : null
+    isAnthropicAppType ? (config.baseUrl || config.base_url || endpoint) : null
   ));
   const anthropicKey = firstString(env.ANTHROPIC_AUTH_TOKEN, env.ANTHROPIC_API_KEY, config.apiKey, config.api_key);
 
-  if (row.app_type === "claude" && (anthropicBaseUrl || anthropicKey)) {
+  if (isAnthropicAppType && (anthropicBaseUrl || anthropicKey)) {
     return {
       id: providerId("cc-switch-db", row.app_type, row.id),
       source: "cc-switch.db",
@@ -258,7 +297,9 @@ function normalizeDbProvider(row, config, settings, endpointMap) {
   }
 
   const openAiKey = firstString(auth.OPENAI_API_KEY, env.OPENAI_API_KEY, config.openaiApiKey, config.openai_api_key);
-  const openAiBaseUrl = inferOpenAiBaseUrl(config) || normalizeBaseUrl(row.app_type === "codex" ? endpoint : null);
+  const openAiBaseUrl = inferOpenAiBaseUrl(config) || normalizeBaseUrl(
+    ["codex", "hermes"].includes(row.app_type) ? endpoint : null
+  );
 
   if (openAiBaseUrl || openAiKey) {
     return {
@@ -464,11 +505,11 @@ async function loadKeysJsonProviders() {
   return providers;
 }
 
-function dedupeProviders(providers) {
+function dedupeBySourceId(providers) {
   const seen = new Set();
   const output = [];
   for (const provider of providers) {
-    const key = `${provider.kind}:${provider.baseUrl}:${provider.model}:${provider.name}`;
+    const key = `${provider.source}|${provider.sourceProviderId}|${provider.appType}|${provider.kind}`;
     if (seen.has(key)) continue;
     seen.add(key);
     output.push(provider);
@@ -476,24 +517,81 @@ function dedupeProviders(providers) {
   return output;
 }
 
+async function loadCustomProvidersAsShape() {
+  const raw = await listCustomProviders();
+  return raw.map(toProviderShape);
+}
+
 export async function loadProviders() {
   const groups = await Promise.all([
     loadDbProviders(),
     loadClaudeProfileProviders(),
-    loadKeysJsonProviders()
+    loadKeysJsonProviders(),
+    loadCustomProvidersAsShape()
   ]);
-  return dedupeProviders(groups.flat());
+  return dedupeBySourceId(groups.flat());
+}
+
+export function providerGroupKey(provider) {
+  if (!provider.compatible || !provider.baseUrl) return `solo:${provider.id}`;
+  return `${provider.appType}|${normalizeBaseUrl(provider.baseUrl) || ""}`;
+}
+
+export function groupProviders(providers, { activeId, pinnedId } = {}) {
+  const buckets = new Map();
+  for (const provider of providers) {
+    const key = providerGroupKey(provider);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(provider);
+  }
+
+  const score = (p) => {
+    let s = 0;
+    if (p.id === pinnedId) s += 1000;
+    if (p.isCcSwitchCurrent) s += 100;
+    if (p.compatible) s += 10;
+    if (p.authPresent) s += 5;
+    return s;
+  };
+
+  const output = [];
+  for (const members of buckets.values()) {
+    const sorted = [...members].sort((a, b) =>
+      score(b) - score(a) || (a.name || "").localeCompare(b.name || "")
+    );
+    const primary = (activeId && members.find((m) => m.id === activeId)) || sorted[0];
+    const aliases = members.filter((m) => m.id !== primary.id);
+    output.push({ primary, aliases, members });
+  }
+  return output;
+}
+
+export function sanitizeAlias(provider) {
+  return {
+    id: provider.id,
+    sourceProviderId: provider.sourceProviderId,
+    source: provider.source,
+    appType: provider.appType,
+    appTypeLabel: APP_TYPE_LABELS[provider.appType] || (provider.appType || "").toUpperCase() || "UNKNOWN",
+    name: provider.name,
+    authPresent: provider.authPresent,
+    isCcSwitchCurrent: provider.isCcSwitchCurrent
+  };
 }
 
 export function sanitizeProvider(provider) {
+  const masked = maskUrl(provider.baseUrl);
   return {
     id: provider.id,
     source: provider.source,
     sourceProviderId: provider.sourceProviderId,
     appType: provider.appType,
+    appTypeLabel: appTypeLabel(provider.appType),
     name: provider.name,
     kind: provider.kind,
-    baseUrl: maskUrl(provider.baseUrl),
+    baseUrl: masked,
+    loopbackSafe: loopbackSafe(provider.baseUrl),
+    directProxyOnly: !loopbackSafe(provider.baseUrl) && provider.compatible,
     model: provider.model,
     models: provider.models || (provider.model ? [provider.model] : []),
     authPresent: provider.authPresent,
@@ -510,5 +608,22 @@ export function configLocations() {
     ccSwitchSettings: CCSWITCH_SETTINGS_PATH,
     claudeProfiles: CLAUDE_PROFILES_DIR,
     ccSwitchKeys: CCSWITCH_KEYS_PATH
+  };
+}
+
+export async function readCcSwitchSettingsMtime() {
+  try {
+    const stat = await fs.stat(CCSWITCH_SETTINGS_PATH);
+    return Math.floor(stat.mtimeMs);
+  } catch {
+    return 0;
+  }
+}
+
+export async function readCcSwitchActiveIds() {
+  const settings = await readJson(CCSWITCH_SETTINGS_PATH, {});
+  return {
+    claude: settings?.currentProviderClaude || null,
+    codex: settings?.currentProviderCodex || null
   };
 }

@@ -5,7 +5,7 @@ function sendJson(res, status, data) {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
     "access-control-allow-headers": "content-type, authorization, x-api-key, anthropic-version, anthropic-beta",
-    "access-control-allow-methods": "GET, POST, OPTIONS"
+    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS"
   });
   res.end(JSON.stringify(data));
 }

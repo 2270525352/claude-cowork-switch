@@ -1,4 +1,4 @@
-name: Build Desktop Apps
+name: Release
 
 on:
   workflow_dispatch:
@@ -6,23 +6,29 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            script: dist:mac
-            artifact: macos
+            label: macOS
+            dist: dist:mac
+            release: release:mac
           - os: windows-latest
-            script: dist:win
-            artifact: windows
+            label: Windows
+            dist: dist:win
+            release: release:win
           - os: ubuntu-latest
-            script: dist:linux
-            artifact: linux
+            label: Linux
+            dist: dist:linux
+            release: release:linux
 
     steps:
       - uses: actions/checkout@v4
@@ -30,18 +36,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Run tests
+      - name: Build icons
+        run: npm run build:icons
+
+      - name: Run smoke tests
         run: npm test
 
-      - name: Build package
-        run: npm run ${{ matrix.script }}
+      - name: Build (no publish)
+        if: github.ref_type != 'tag'
+        run: npm run ${{ matrix.dist }}
 
-      - name: Upload artifact
+      - name: Build and publish to GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run ${{ matrix.release }}
+
+      - name: Upload artifact (manual builds)
+        if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: claude-cowork-switch-${{ matrix.artifact }}
-          path: release/**
+          name: claude-cowork-switch-${{ matrix.label }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+          if-no-files-found: ignore

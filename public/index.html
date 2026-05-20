@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,77 +8,209 @@
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <h1>Claude 中转切换器</h1>
-        <p>读取现有 cc-switch 配置，切换 Claude Desktop Gateway 上游。</p>
+      <div class="brand">
+        <img class="brand-logo" src="/logo.svg" alt="" aria-hidden="true" width="36" height="36">
+        <div class="brand-text">
+          <h1 data-i18n="app.title">Claude 中转切换器</h1>
+          <p class="subtitle" data-i18n="app.subtitle">读取 cc-switch 配置，切换 Claude Desktop Gateway 上游</p>
+        </div>
       </div>
       <div class="actions">
-        <button id="configureClaudeButton" type="button">一键配置 Claude Desktop</button>
-        <button id="restartClaudeButton" type="button">重启 Claude</button>
-        <button id="refreshButton" type="button">刷新</button>
+        <div class="lang-switch" role="tablist" aria-label="Language">
+          <button class="lang-btn" data-lang="zh" type="button">中文</button>
+          <button class="lang-btn" data-lang="en" type="button">EN</button>
+        </div>
+        <button class="btn btn-primary" id="setupButton" type="button" data-i18n="btn.setup">一键启用</button>
+        <button class="btn" id="configureClaudeButton" type="button" data-i18n="btn.configure">配置 Claude</button>
+        <button class="btn" id="restartClaudeButton" type="button" data-i18n="btn.restart">重启 Claude</button>
+        <button class="btn" id="addProviderButton" type="button" data-i18n="btn.addProvider">添加渠道</button>
+        <button class="btn" id="refreshButton" type="button" data-i18n="btn.refresh">刷新</button>
       </div>
     </header>
 
-    <main>
-      <section class="status-band" aria-label="Gateway status">
-        <div class="metric">
-          <span class="label">Gateway 地址</span>
-          <code id="gatewayUrl">http://127.0.0.1:8787</code>
-        </div>
-        <div class="metric">
-          <span class="label">Gateway 密钥</span>
-          <code id="bridgeKey">加载中</code>
-        </div>
-        <div class="metric">
-          <span class="label">当前渠道</span>
-          <strong id="activeProvider">加载中</strong>
-        </div>
-      </section>
+    <section class="banner" id="autoBanner" hidden>
+      <span class="banner-text" id="autoBannerText"></span>
+      <button class="btn btn-primary btn-sm" id="autoBannerRestart" type="button" data-i18n="btn.restart">重启 Claude</button>
+      <button class="btn btn-sm" id="autoBannerDismiss" type="button" data-i18n="btn.dismiss">忽略</button>
+    </section>
 
-      <section class="claude-band" aria-label="Claude Desktop 配置">
-        <div>
-          <span class="label">Claude Desktop</span>
-          <strong id="claudeConfigStatus">正在检查配置...</strong>
+    <section class="checkpoints" aria-label="Setup status">
+      <div class="chip" data-chk="gateway">
+        <span class="chip-dot"></span>
+        <span class="chip-label" data-i18n="chk.gateway">Gateway</span>
+        <span class="chip-detail" data-chk-detail></span>
+      </div>
+      <div class="chip" data-chk="config">
+        <span class="chip-dot"></span>
+        <span class="chip-label" data-i18n="chk.config">3P 配置</span>
+        <span class="chip-detail" data-chk-detail></span>
+      </div>
+      <div class="chip" data-chk="claude">
+        <span class="chip-dot"></span>
+        <span class="chip-label" data-i18n="chk.claude">Claude 进程</span>
+        <span class="chip-detail" data-chk-detail></span>
+      </div>
+      <div class="chip" data-chk="active">
+        <span class="chip-dot"></span>
+        <span class="chip-label" data-i18n="chk.active">活跃通道</span>
+        <span class="chip-detail" data-chk-detail></span>
+      </div>
+      <span class="checkpoints-hint" id="setupHint" data-i18n="chk.hint">点击"一键启用"自动写入配置并重启 Claude</span>
+    </section>
+
+    <main class="main">
+      <section class="stats">
+        <div class="stat">
+          <span class="stat-label" data-i18n="label.gateway">Gateway</span>
+          <code class="stat-value" id="gatewayUrl">http://127.0.0.1:8787</code>
         </div>
-        <code id="claudeConfigPath">加载中</code>
-      </section>
-
-      <section class="content-grid">
-        <aside class="side-panel" aria-label="检测到的配置位置">
-          <h2>配置来源</h2>
-          <dl id="locations"></dl>
-        </aside>
-
-        <section class="main-panel" aria-label="渠道列表">
-          <div class="panel-heading">
-            <div>
-              <h2>渠道</h2>
-              <p id="providerSummary">正在扫描 cc-switch 配置...</p>
-            </div>
+        <div class="stat">
+          <span class="stat-label" data-i18n="label.bridge">Bridge Key</span>
+          <div class="key-wrap">
+            <code class="stat-value mono" id="bridgeKey">••••••••••••</code>
+            <button class="btn btn-sm" id="bridgeKeyReveal" type="button" data-i18n="btn.show">显示</button>
+            <button class="btn btn-sm" id="bridgeKeyCopy" type="button" data-i18n="btn.copy">复制</button>
           </div>
+        </div>
+        <div class="stat">
+          <span class="stat-label" data-i18n="label.active">活跃通道</span>
+          <strong class="stat-value" id="activeProvider">--</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label" data-i18n="label.claude">Claude Desktop</span>
+          <strong class="stat-value" id="claudeConfigStatus">--</strong>
+        </div>
+      </section>
+
+      <section class="settings">
+        <label class="setting">
+          <span class="setting-label" data-i18n="label.modelSource">模型来源</span>
+          <select id="modelSourceSelect">
+            <option value="" data-i18n="modelSrc.auto">自动</option>
+            <option value="official" data-i18n="modelSrc.official">官方模型</option>
+            <option value="provider" data-i18n="modelSrc.provider">渠道自带</option>
+          </select>
+        </label>
+        <label class="setting setting-check">
+          <input type="checkbox" id="healthProbeToggle">
+          <span data-i18n="label.healthProbe">切换前探测可用性</span>
+        </label>
+        <div class="setting-meta">
+          <span class="setting-label" data-i18n="label.configDir">3P 配置目录</span>
+          <code id="claudeConfigPath">--</code>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <header class="panel-head">
+            <h2 data-i18n="section.providers">通道</h2>
+            <span class="panel-meta" id="providerSummary" data-i18n="status.scanning">扫描中…</span>
+          </header>
           <div class="table-wrap">
-            <table>
+            <table class="table">
               <thead>
                 <tr>
-                  <th>名称</th>
-                  <th>应用</th>
-                  <th>协议</th>
-                  <th>模型</th>
-                  <th>地址</th>
-                  <th>状态</th>
-                  <th>操作</th>
+                  <th data-i18n="th.name">名称</th>
+                  <th data-i18n="th.app">应用</th>
+                  <th data-i18n="th.model">模型</th>
+                  <th data-i18n="th.url">地址</th>
+                  <th data-i18n="th.state">状态</th>
+                  <th data-i18n="th.action">操作</th>
                 </tr>
               </thead>
               <tbody id="providerRows"></tbody>
             </table>
           </div>
+          <details class="fold" id="unsupportedFold">
+            <summary>
+              <span data-i18n="section.unsupported">停用通道</span>
+              <span class="count" id="unsupportedCount">(0)</span>
+            </summary>
+            <div class="fold-body" id="unsupportedList"></div>
+          </details>
         </section>
-      </section>
+
+        <aside class="side">
+          <section class="panel">
+            <header class="panel-head">
+              <h2 data-i18n="section.locations">配置来源</h2>
+            </header>
+            <dl class="kv" id="locations"></dl>
+          </section>
+          <section class="panel">
+            <header class="panel-head">
+              <h2 data-i18n="section.log">请求日志</h2>
+            </header>
+            <div class="log" id="logStrip" aria-live="polite">
+              <div class="log-empty" data-i18n="log.empty">尚无请求</div>
+            </div>
+            <footer class="panel-foot" data-i18n="log.foot">最近 60 条 · 每 2 秒刷新</footer>
+          </section>
+        </aside>
+      </div>
     </main>
+
+    <div class="modal" id="providerModal" hidden role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <header class="modal-head">
+          <h3 id="providerModalTitle" data-i18n="provider.title">添加渠道</h3>
+        </header>
+        <form class="modal-body provider-form" id="providerForm">
+          <label class="form-row form-row-stack">
+            <span class="form-label" data-i18n="provider.name">名称</span>
+            <input class="text-input" name="name" type="text" required placeholder="My Anthropic Proxy">
+          </label>
+          <label class="form-row form-row-stack">
+            <span class="form-label" data-i18n="provider.kind">协议</span>
+            <select name="kind" class="text-input">
+              <option value="anthropic">Anthropic Messages API (Claude)</option>
+              <option value="openai">OpenAI Chat Completions</option>
+            </select>
+          </label>
+          <label class="form-row form-row-stack">
+            <span class="form-label" data-i18n="provider.baseUrl">Base URL</span>
+            <input class="text-input is-mono" name="baseUrl" type="url" required placeholder="https://api.example.com/v1">
+          </label>
+          <label class="form-row form-row-stack">
+            <span class="form-label">
+              <span data-i18n="provider.apiKey">API Key</span>
+              <span class="form-hint" id="apiKeyHint"></span>
+            </span>
+            <input class="text-input is-mono" name="apiKey" type="password" placeholder="sk-…">
+          </label>
+          <label class="form-row form-row-stack">
+            <span class="form-label">
+              <span data-i18n="provider.models">模型列表</span>
+              <span class="form-hint" data-i18n="provider.modelsHint">每行一个，第一项作为默认</span>
+            </span>
+            <textarea class="text-input is-mono" name="models" rows="4" placeholder="claude-sonnet-4-6[1m]&#10;claude-opus-4-7[1m]"></textarea>
+          </label>
+          <div class="form-error" id="providerFormError" hidden></div>
+        </form>
+        <footer class="modal-foot">
+          <button class="btn" id="providerCancel" type="button" data-i18n="modal.cancel">取消</button>
+          <button class="btn btn-primary" id="providerSubmit" type="submit" form="providerForm" data-i18n="modal.ok">确定</button>
+        </footer>
+      </div>
+    </div>
+
+    <div class="modal" id="modal" hidden role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <header class="modal-head">
+          <h3 id="modalTitle" data-i18n="modal.confirm">确认</h3>
+        </header>
+        <div class="modal-body" id="modalBody"></div>
+        <footer class="modal-foot">
+          <button class="btn" id="modalCancel" type="button" data-i18n="modal.cancel">取消</button>
+          <button class="btn btn-primary" id="modalConfirm" type="button" data-i18n="modal.ok">确定</button>
+        </footer>
+      </div>
+    </div>
 
     <template id="emptyTemplate">
       <tr>
-        <td colspan="7" class="empty">没有检测到 cc-switch 渠道。</td>
+        <td colspan="6" class="empty" data-i18n="table.empty">未在 cc-switch 中发现通道</td>
       </tr>
     </template>
 

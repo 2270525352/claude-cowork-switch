@@ -110,26 +110,24 @@ dist/Claude Cowork Switch.app
 
 如果自动配置不可用，再手动配置：
 
-如果 Claude Desktop 的 3P Gateway 要求 HTTPS，本地测试可先开隧道：
+Claude Desktop 对 3P Gateway 的 URL 强制 HTTPS，但 `127.0.0.1` / `localhost` 走 loopback 例外允许 HTTP。本机本地使用直接填 `http://127.0.0.1:8787` 即可，不必再用 cloudflared / ngrok。
+
+如果你确实需要把 Gateway 暴露给另一台机器使用，再考虑反向代理或隧道：
 
 ```bash
 cloudflared tunnel --url http://127.0.0.1:8787
+# 或 ngrok http 8787
 ```
 
-或：
-
-```bash
-ngrok http 8787
-```
-
-然后在 Claude Desktop：
+在 Claude Desktop：
 
 1. 开启 Developer mode。
 2. 进入 third-party inference / Gateway 配置。
 3. Provider 选择 `Gateway`。
-4. Gateway base URL 填 App 显示的地址，或隧道 HTTPS 地址。
-5. Gateway API key 填 App 显示的密钥。
-6. 重启 Claude Desktop。
+4. Gateway base URL 填 `http://127.0.0.1:8787`（或远程隧道的 HTTPS 地址）。
+5. Auth scheme 选 `bearer`。
+6. Gateway API key 填 App 显示的密钥。
+7. 重启 Claude Desktop。
 
 之后只需要在 Claude 中转切换器里切换渠道。
 
@@ -153,20 +151,42 @@ CCSWITCH_HOME=/Users/you/.cc-switch
 - `official`：所有 Anthropic-compatible 渠道都使用官方 Claude 模型清单。
 - `provider`：完全使用 cc-switch / profile 中配置的模型。
 
-桌面 App 会把运行状态写到系统应用数据目录：
+无论通过 `npm start`、`npm run app:dev` 还是打包后的桌面 App 启动，运行状态都写到同一份用户级目录，避免 bridge key 在不同启动方式间漂移：
 
-- macOS：`~/Library/Application Support/Claude 中转切换器`
-- Windows：`%APPDATA%\Claude 中转切换器`
-- Linux：`~/.config/Claude 中转切换器`
+- macOS：`~/Library/Application Support/claude-cowork-switch`
+- Windows：`%APPDATA%\claude-cowork-switch`
+- Linux：`~/.config/claude-cowork-switch`
 
-开发模式下 `npm start` 默认写到项目内 `data/`，该目录已被 `.gitignore` 忽略。
+如需把状态固定到其他位置，设置环境变量 `CCS_DATA_DIR=/path/to/dir`。
 
-## 发布到 GitHub
+## 发布到 GitHub Releases
+
+1. 本地把版本号往前推一档：
+
+   ```bash
+   npm version patch        # 或 minor / major
+   git push --follow-tags
+   ```
+
+2. `npm version` 会自动建出 `vX.Y.Z` 标签并 push，触发 `.github/workflows/release.yml`：
+
+   - macOS runner 产 `.dmg` + `.zip`
+   - Windows runner 产 NSIS 安装包 + portable
+   - Linux runner 产 `.AppImage`、`.deb`、`.tar.gz`
+   - 三个 runner 都 `--publish always`，把产物挂到对应的 GitHub Release 上
+
+3. 手动触发：仓库 Actions 页面点 `Release` 工作流的 `Run workflow`。这种触发只生成 workflow artifact，不创建 Release。
+
+4. 触发条件要求仓库有 `GITHUB_TOKEN` 权限（默认 `permissions: contents: write` 已声明），无需额外 secret。
+
+不要提交本机的 `data/`、`dist/`、`release/`、日志、密钥或私有配置数据库。
+
+## 图标
+
+源文件在 `logo/中转.svg`。`scripts/build-icons.mjs` 把它栅格化成多尺寸 PNG、Windows `.ico`、macOS `.icns`（通过系统 `iconutil`，仅 macOS 可生成；CI 跑构建图标这一步会在每个平台 runner 上重新生成）。本地手动生成：
 
 ```bash
-git init
-git add .
-git commit -m "Initial release"
+npm run build:icons
 ```
 
-不要提交本机的 `data/`、`dist/`、`release/`、日志、密钥或私有配置数据库。打包产物建议作为 GitHub Release 附件上传。
+生成产物在 `build/`，已被 electron-builder 用作 `mac.icon` / `win.icon` / `linux.icon`，Web UI 也通过 `public/logo.svg`（构建图标时复制过去）展示。

@@ -8,11 +8,15 @@
     "start": "node src/server.mjs",
     "test": "node test/smoke-test.mjs",
     "app:dev": "electron .",
+    "build:icons": "node scripts/build-icons.mjs",
     "package:mac-native": "scripts/package-macos.sh",
     "package:electron": "electron-builder --dir",
     "dist:mac": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win nsis portable",
-    "dist:linux": "electron-builder --linux AppImage deb tar.gz"
+    "dist:linux": "electron-builder --linux AppImage deb tar.gz",
+    "release:mac": "electron-builder --mac dmg zip --publish always",
+    "release:win": "electron-builder --win nsis portable --publish always",
+    "release:linux": "electron-builder --linux AppImage deb tar.gz --publish always"
   },
   "bin": {
     "claude-cowork-switch": "src/server.mjs"
@@ -24,8 +28,10 @@
     "sql.js": "^1.10.3"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1"
   },
   "build": {
     "appId": "com.local.claudecoworkswitch",
@@ -35,20 +41,30 @@
       "electron/**/*",
       "src/**/*",
       "public/**/*",
+      "build/icons/**/*",
       "package.json",
       "README.md"
     ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable"
@@ -56,6 +72,7 @@
     },
     "linux": {
       "category": "Development",
+      "icon": "build/icons",
       "target": [
         "AppImage",
         "deb",

@@ -243,15 +243,35 @@ try {
 
   const providersRes = await fetch(`${BASE}/api/providers`);
   const providersData = await providersRes.json();
-  assert(providersData.providers.length === 3, "Expected three providers from cc-switch fixture");
+  assert(providersData.providers.length === 2, "Expected two grouped providers (claude + codex) from cc-switch fixture");
   assert(providersData.providers.every((provider) => !provider.secret), "API leaked provider secret data");
-  assert(providersData.providers.some((provider) => provider.active && provider.name === "Fixture Claude"), "cc-switch current provider was not selected");
-  const activeProvider = providersData.providers.find((provider) => provider.active);
-  assert(activeProvider.models.includes("fixture-opus"), "Active provider did not expose cc-switch model list");
-  const officialProvider = providersData.providers.find((provider) => provider.name === "Official Claude Route");
-  assert(officialProvider.models.includes("claude-opus-4-7[1m]"), "Claude-like provider did not sync official Claude model list");
-  assert(officialProvider.models.includes("claude-opus-4-6[1m]"), "Claude-like provider did not include official Opus 4.6 model");
-  assert(!officialProvider.models.includes("claude-haiku-4-6[1m]"), "Claude-like provider kept guessed non-official model");
+
+  const findInGroups = (predicate) => {
+    for (const group of providersData.providers) {
+      if (predicate(group)) return { group, source: "primary" };
+      for (const alias of group.aliases || []) {
+        if (predicate({ ...alias, group })) return { group, alias, source: "alias" };
+      }
+    }
+    return null;
+  };
+
+  const fixtureClaude = findInGroups((p) => p.name === "Fixture Claude");
+  assert(fixtureClaude, "Fixture Claude was not found in grouped providers");
+  assert(fixtureClaude.group.active, "Fixture Claude group is not marked active");
+
+  const activeGroup = providersData.providers.find((provider) => provider.active);
+  assert(activeGroup.models.includes("fixture-opus"), "Active group did not expose cc-switch model list");
+  assert(activeGroup.aliasCount === 1, "Active claude group did not collapse the Official Claude Route alias");
+
+  const officialAlias = findInGroups((p) => p.name === "Official Claude Route");
+  assert(officialAlias, "Official Claude Route alias was not surfaced");
+  const officialModels = activeGroup.models;
+  assert(officialModels.includes("fixture-opus"), "Claude group models missing fixture-opus");
+  assert(activeGroup.appTypeLabel === "CLAUDE", "Claude group missing appTypeLabel");
+
+  const settingsCheck = providersData.settings;
+  assert(settingsCheck && "modelSource" in settingsCheck, "Providers response missing settings block");
 
   const modelsRes = await fetch(`${BASE}/v1/models`);
   const modelsData = await modelsRes.json();
@@ -269,8 +289,11 @@ try {
   const config = JSON.parse(await fs.readFile(path.join(tempHome, "Claude-3p", "configLibrary", `${meta.appliedId}.json`), "utf8"));
   assert(config.inferenceProvider === "gateway", "Claude Desktop config did not set Gateway provider");
   assert(config.inferenceGatewayApiKey === KEY, "Claude Desktop config did not write Gateway key");
-  assert(config.inferenceGatewayAuthScheme === "x-api-key", "Claude Desktop config did not set x-api-key auth");
-  assert(config.inferenceModels.includes("fixture-opus"), "Claude Desktop config did not write multiple Gateway models");
+  assert(config.inferenceGatewayAuthScheme === "bearer", "Claude Desktop config did not set bearer auth");
+  assert(typeof config.inferenceModels === "string", "Claude Desktop config inferenceModels should be JSON string");
+  assert(typeof config.inferenceCustomHeaders === "string", "Claude Desktop config inferenceCustomHeaders should be JSON string");
+  const parsedModels = JSON.parse(config.inferenceModels);
+  assert(parsedModels.includes("fixture-opus"), "Claude Desktop config did not write multiple Gateway models");
   const primaryConfig = JSON.parse(await fs.readFile(path.join(tempHome, "Claude", "claude_desktop_config.json"), "utf8"));
   assert(primaryConfig.deploymentMode === "3p", "Primary Claude config did not set deploymentMode");
 
@@ -282,7 +305,7 @@ try {
   const officialSwitchRes = await fetch(`${BASE}/api/active`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: officialProvider.id })
+    body: JSON.stringify({ id: officialAlias.alias.id, skipHealthProbe: true })
   });
   assert(officialSwitchRes.ok, "Switching to Claude-like provider failed");
   const streamedAnthropicMessage = await postMessages("hello", "claude-sonnet-4-6[1m]", true);
@@ -312,7 +335,7 @@ try {
   const switchRes = await fetch(`${BASE}/api/active`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: openAiProvider.id })
+    body: JSON.stringify({ id: openAiProvider.id, skipHealthProbe: true })
   });
   assert(switchRes.ok, "Switching active provider failed");
 

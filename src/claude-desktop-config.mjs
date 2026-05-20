@@ -133,10 +133,25 @@ function configForGateway({ baseUrl, apiKey, model, models }) {
     inferenceProvider: "gateway",
     inferenceGatewayBaseUrl: baseUrl,
     inferenceGatewayApiKey: apiKey,
-    inferenceGatewayAuthScheme: "x-api-key",
-    inferenceModels,
+    inferenceGatewayAuthScheme: "bearer",
+    inferenceModels: JSON.stringify(inferenceModels),
+    inferenceCustomHeaders: "{}",
     unstableDisableModelVerification: true
   };
+}
+
+function parseInferenceModels(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(modelName).filter(Boolean);
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map(modelName).filter(Boolean);
+    } catch {
+      return value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
 }
 
 function normalizeMeta(meta) {
@@ -164,6 +179,7 @@ export async function claudeDesktopConfigStatus(origin) {
   const deployment = await readJson(deploymentConfigPath(), {});
   const baseUrl = gatewayBaseUrl(origin);
 
+  const models = parseInferenceModels(config?.inferenceModels);
   return {
     supported: true,
     platform: process.platform,
@@ -178,8 +194,9 @@ export async function claudeDesktopConfigStatus(origin) {
     gatewayBaseUrl: config?.inferenceGatewayBaseUrl || null,
     targetGatewayBaseUrl: baseUrl,
     authScheme: config?.inferenceGatewayAuthScheme || null,
-    model: Array.isArray(config?.inferenceModels) ? modelName(config.inferenceModels[0]) : null,
-    models: Array.isArray(config?.inferenceModels) ? config.inferenceModels.map(modelName).filter(Boolean) : []
+    model: models[0] || null,
+    models,
+    rawConfig: config || null
   };
 }
 
@@ -204,6 +221,55 @@ export async function applyClaudeDesktopConfig({ origin, apiKey, model, models }
     backupDir,
     status: await claudeDesktopConfigStatus(origin)
   };
+}
+
+export async function claudeDesktopInstalled() {
+  const candidates = [];
+  if (process.platform === "darwin") {
+    candidates.push("/Applications/Claude.app");
+    candidates.push(path.join(homeDir(), "Applications", "Claude.app"));
+  } else if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || path.join(homeDir(), "AppData", "Local");
+    candidates.push(path.join(localAppData, "AnthropicClaude", "Claude.exe"));
+    candidates.push(path.join("C:\\Program Files", "Claude", "Claude.exe"));
+  } else {
+    candidates.push("/usr/bin/claude");
+    candidates.push(path.join(homeDir(), ".local", "bin", "claude"));
+  }
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return { installed: true, path: candidate };
+    } catch {
+      /* keep checking */
+    }
+  }
+  try {
+    await fs.access(claudePrimaryDir());
+    return { installed: true, path: claudePrimaryDir(), inferred: true };
+  } catch {
+    return { installed: false };
+  }
+}
+
+export async function claudeDesktopProcessState() {
+  try {
+    if (process.platform === "darwin") {
+      const { stdout } = await execFileAsync("osascript", [
+        "-e",
+        'tell application "System Events" to (name of processes) contains "Claude"'
+      ]);
+      return { running: stdout.trim() === "true" };
+    }
+    if (process.platform === "win32") {
+      const { stdout } = await execFileAsync("tasklist", ["/FI", "IMAGENAME eq Claude.exe", "/NH"]);
+      return { running: /Claude\.exe/i.test(stdout) };
+    }
+    const { stdout } = await execFileAsync("pgrep", ["-f", "Claude"]).catch(() => ({ stdout: "" }));
+    return { running: Boolean(stdout.trim()) };
+  } catch {
+    return { running: false, error: "process-check-failed" };
+  }
 }
 
 export async function restartClaudeDesktop() {

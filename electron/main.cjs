@@ -11,10 +11,20 @@ let tray = null;
 let gatewayServer = null;
 let isQuitting = false;
 
+function appIconPath(size) {
+  return path.join(__dirname, "..", "build", "icons", `${size}x${size}.png`);
+}
+
 function trayIcon() {
-  return nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAX0lEQVR4nGNkYGBg+M+ABzAyMv7H4eHh/6GhoRgYGBhGJgbG/0QyMxMDA8N/DAwMf2BgYPgPxKYAqRkYGP4jIyP/Dw8P/4GBgf8QGxv7HxkZGQYGBgYGBkYGAABM9hMdu+1f3wAAAABJRU5ErkJggg=="
-  );
+  if (process.platform === "darwin") {
+    const base = nativeImage.createFromPath(appIconPath(32));
+    return base.resize({ width: 18, height: 18, quality: "best" });
+  }
+  return nativeImage.createFromPath(appIconPath(16));
+}
+
+function windowIcon() {
+  return nativeImage.createFromPath(appIconPath(256));
 }
 
 async function healthOk() {
@@ -32,7 +42,6 @@ async function healthOk() {
 async function startGateway() {
   process.env.HOST = HOST;
   process.env.PORT = String(PORT);
-  process.env.CCS_DATA_DIR ||= app.getPath("userData");
 
   if (await healthOk()) return;
 
@@ -54,6 +63,7 @@ function createWindow() {
     minWidth: 860,
     minHeight: 560,
     title: "Claude 中转切换器",
+    icon: windowIcon(),
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -149,7 +159,6 @@ function updateTrayMenu() {
 function createTray() {
   tray = new Tray(trayIcon());
   tray.setToolTip("Claude 中转切换器");
-  if (process.platform === "darwin") tray.setTitle("CCS");
   tray.on("click", showWindow);
   updateTrayMenu();
 }
