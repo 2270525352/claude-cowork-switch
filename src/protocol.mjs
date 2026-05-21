@@ -644,11 +644,11 @@ async function sendAnthropicResponseAsStream(res, upstreamResponse, selectedMode
       continue;
     }
 
-    if (block.type === "tool_use") {
+    if (block.type === "tool_use" || block.type === "server_tool_use") {
       writeEvent(res, {
         type: "content_block_start",
         index,
-        content_block: { type: "tool_use", id: block.id, name: block.name, input: {} }
+        content_block: { type: block.type, id: block.id, name: block.name, input: {} }
       });
       writeEvent(res, {
         type: "content_block_delta",
@@ -656,7 +656,44 @@ async function sendAnthropicResponseAsStream(res, upstreamResponse, selectedMode
         delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input || {}) }
       });
       writeEvent(res, { type: "content_block_stop", index });
+      continue;
     }
+
+    if (block.type === "thinking") {
+      writeEvent(res, {
+        type: "content_block_start",
+        index,
+        content_block: { type: "thinking", thinking: "" }
+      });
+      if (block.thinking) {
+        writeEvent(res, {
+          type: "content_block_delta",
+          index,
+          delta: { type: "thinking_delta", thinking: block.thinking }
+        });
+      }
+      if (block.signature) {
+        writeEvent(res, {
+          type: "content_block_delta",
+          index,
+          delta: { type: "signature_delta", signature: block.signature }
+        });
+      }
+      writeEvent(res, { type: "content_block_stop", index });
+      continue;
+    }
+
+    // Fallback for result-style and any other server-side block types:
+    // web_search_tool_result, web_fetch_tool_use/_result, code_execution_tool_use/_result,
+    // mcp_tool_use/_result, redacted_thinking, container_upload, etc.
+    // The block isn't generated incrementally upstream — we have the whole thing,
+    // so emit it as the content_block_start initial state and close immediately.
+    writeEvent(res, {
+      type: "content_block_start",
+      index,
+      content_block: block
+    });
+    writeEvent(res, { type: "content_block_stop", index });
   }
 
   writeEvent(res, {
