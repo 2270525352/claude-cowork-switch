@@ -82,6 +82,14 @@ Claude Desktop 只需要被指向 `http://127.0.0.1:8787` 一次。之后所有"
 
 双击安装并运行。系统托盘 / 菜单栏会出现一个红色 中转 图标，点开它的"显示控制面板"或者直接打开浏览器 `http://127.0.0.1:8787` 也能看到 UI。
 
+> **macOS 首次打开**：本项目暂时没有 Apple Developer ID 证书，所以从 Releases 下载下来的 `.dmg` / `.zip` 默认会被 Gatekeeper 拦下、弹"已损坏，移到废纸篓"。文件其实是好的，只是没付费签名。装完 App 后执行一次下面这条命令清掉系统加的隔离标记即可，之后双击就能开：
+>
+> ```bash
+> xattr -cr "/Applications/Claude 中转切换器.app"
+> ```
+>
+> 也可以在挂载 DMG 之前先给安装包本身清标记：`xattr -cr ~/Downloads/claude-cowork-switch-*.dmg`。
+
 </details>
 
 <details>
@@ -269,6 +277,25 @@ UI 上的状态徽章如果显示 `缺密钥`（黄色），说明这条 cc-swit
 <summary><b>Q: 不想自动重启 Claude / 不想自动写配置</b></summary>
 
 自动写配置只在"缺失 / key 不匹配 / 模式不是 3p"三种情况触发，且**绝不自动重启 Claude**——重启永远是手动按钮。如果你完全不想要自动写入，目前可以通过删除 `Claude-3p/configLibrary/<id>.json` 然后断开网络让 `apply` 失败来回避；后续可以加一个 `state.json` 开关。
+
+</details>
+
+<details>
+<summary><b>Q: macOS 打开提示"已损坏，移到废纸篓"</b></summary>
+
+不是真的坏了，是 Gatekeeper 的统一拒绝文案。本项目目前没有 Apple Developer ID 证书（$99/年），electron-builder 只能做 ad-hoc 签名；浏览器下载下来又会自动打 `com.apple.quarantine` 标记，两者叠加就被拦了。
+
+一次性清掉隔离标记即可：
+
+```bash
+# 已经拖进 Applications 的话：
+xattr -cr "/Applications/Claude 中转切换器.app"
+
+# 或者在挂载 DMG 之前先清安装包：
+xattr -cr ~/Downloads/claude-cowork-switch-*.dmg
+```
+
+执行后双击直接打开，不会再弹任何 Gatekeeper 警告。Intel Mac 和 Apple Silicon 用同一条命令。
 
 </details>
 
