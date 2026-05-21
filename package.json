@@ -1,6 +1,6 @@
 {
   "name": "claude-cowork-switch",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "A local Claude Desktop Gateway switcher that reads cc-switch provider configs.",
   "main": "electron/main.cjs",
@@ -62,11 +62,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },
